@@ -21,13 +21,13 @@ class TextEmbedder(nn.Module):
     def __init__(self, model_name:str, cache_dir:str, max_seq_len:int):
         super(TextEmbedder, self).__init__()
         
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        self.device = "mps" if torch.backends.mps.is_available() else "cpu"
         self.max_seq_len = max_seq_len
         self.model_name = MODEL_NAME_DICT.get(model_name, "bert_large_uncased")
         self.tokenizer = BertTokenizer.from_pretrained(self.model_name, cache_dir=cache_dir)
         self.model = BertModel.from_pretrained(
                 self.model_name, cache_dir=cache_dir, max_position_embeddings=max_seq_len
-            ).to(device)
+            ).to(self.device)
     
     def get_embedding(self, texts:list[str]):
         if isinstance(texts, str):
@@ -39,7 +39,7 @@ class TextEmbedder(nn.Module):
                     max_length=self.max_seq_len,
                     truncation=True,
                     padding=True,
-                ).to(device)
+                ).to(self.device)
                 all_output = self.model(**input_ids)
 
                 embedding = all_output[0]
