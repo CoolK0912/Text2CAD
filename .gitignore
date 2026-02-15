@@ -167,3 +167,6 @@ cython_debug/
 *ply
 **.sh
 *output
+YOUR DIR/
+.cache/
+Cad_VLM/checkpoints/

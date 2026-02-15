@@ -37,7 +37,7 @@ class Text2CAD(nn.Module):
                         maxlen:int,
                         nucleus_prob,
                         topk_index,
-                        device='cuda' if torch .cuda.is_available() else 'cpu'
+                        device='mps' if torch.backends.mps.is_available() else 'cpu'
                         ):
         """
         Auto-regressively decode CAD sequence from text prompts

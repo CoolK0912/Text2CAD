@@ -43,7 +43,7 @@ def test_model(model, text, config, device):
         maxlen=MAX_CAD_SEQUENCE_LENGTH,
         nucleus_prob=0,
         topk_index=1,
-        device="cuda" if torch.cuda.is_available() else "cpu",
+        device="mps" if torch.backends.mps.is_available() else "cpu",
     )
     try:
         pred_cad = CADSequence.from_vec(
@@ -65,7 +65,7 @@ def parse_config_file(config_file):
 
 config_path = "../Cad_VLM/config/inference_user_input.yaml"
 config = parse_config_file(config_path)
-device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
 model = load_model(config, device)
 OUTPUT_DIR="output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)

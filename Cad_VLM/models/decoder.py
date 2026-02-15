@@ -159,7 +159,7 @@ class CADDecoder(nn.Module):
             num_heads=config["num_heads"],
             dropout=config["dropout"],
             ca_level_start=config["ca_level_start"],
-            device="cuda" if torch.cuda.is_available() else "cpu",
+            device="mps" if torch.backends.mps.is_available() else "cpu",
         )
         return cad_decoder
 
@@ -305,7 +305,7 @@ class CADDecoderLayer(nn.Module):
         block_level=0,
         dropout=0.1,
         use_ca=True,
-        device="cuda",
+        device="mps" if torch.backends.mps.is_available() else "cpu",
     ):
         super(CADDecoderLayer, self).__init__()
 

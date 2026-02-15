@@ -65,10 +65,10 @@ def main():
     args = parser.parse_args()
 
     config = parse_config_file(args.config_path)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
     t2clogger.info(
         "Current Device {}",
-        torch.cuda.get_device_properties(device),
+        device,
     )
 
     # -------------------------------- Load Model -------------------------------- #
@@ -194,7 +194,7 @@ def test_model(
                 maxlen=MAX_CAD_SEQUENCE_LENGTH,
                 nucleus_prob=0,
                 topk_index=TOPK,
-                device="cuda" if torch.cuda.is_available() else "cpu",
+                device="mps" if torch.backends.mps.is_available() else "cpu",
             )
             # Save the results batchwise
             for i in range(
