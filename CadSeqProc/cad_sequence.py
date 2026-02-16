@@ -899,7 +899,8 @@ class CADSequence(object):
 
     def create_cad_model(self):
         cur_solid = None
-        # print(len(self.sketch_seq))
+        clglogger.info(f"Starting CAD generation with {len(self.sketch_seq)} sketches.")
+        
         for i, skt in enumerate(self.sketch_seq):
             ext = self.extrude_seq[i]
             extrude_params = {
@@ -908,11 +909,14 @@ class CADSequence(object):
                     ext.metadata["extent_two"],
                 ]
             }
+            clglogger.debug(f"--- Step {i}: Processing sketch ---")
+            
             try:
                 ext_solid = skt.build_body(extrude_params=extrude_params)
-            except:
-                if i == 0:  # If the first model is incorrect, then it's invalid
-                    raise Exception("Invalid Model")
+            except Exception as e:
+                clglogger.error(f"Step {i}: skt.build_body failed. Exception: {e}")
+                if i == 0:  
+                    raise Exception(f"Invalid Model at Step 0: {e}")
                 else:
                     break
 
@@ -921,24 +925,36 @@ class CADSequence(object):
             brepgprop.VolumeProperties(ext_solid, props)
             solid_volume = props.Mass()
             if solid_volume == 0:
+                clglogger.warning(f"Step {i}: Extrusion skipped. solid_volume is 0. Check extent_one ({ext.metadata['extent_one']}) and extent_two ({ext.metadata['extent_two']}).")
                 continue
+                
             prev_solid = copy.deepcopy(cur_solid)
-            # Perform set operation and save current cad up to this step
+            
+            # Perform set operation
             set_op = EXTRUDE_OPERATIONS[ext.metadata["boolean"]]
+            clglogger.debug(f"Step {i}: Attempting Boolean operation: {set_op}")
+            
             if set_op == "NewBodyFeatureOperation" or set_op == "JoinFeatureOperation":
                 if cur_solid is None:
+                    clglogger.debug(f"Step {i}: Initializing first solid body.")
                     cur_solid = ext_solid
                 else:
                     cur_solid = perform_op(cur_solid, ext_solid, "fuse")
             elif set_op == "CutFeatureOperation":
+                if cur_solid is None:
+                    clglogger.warning(f"Step {i}: Cannot perform Cut on an empty solid. Skipping.")
                 cur_solid = perform_op(cur_solid, ext_solid, "cut")
             elif set_op == "IntersectFeatureOperation":
+                if cur_solid is None:
+                    clglogger.warning(f"Step {i}: Cannot perform Intersect on an empty solid. Skipping.")
                 cur_solid = perform_op(cur_solid, ext_solid, "common")
             else:
+                clglogger.error(f"Step {i}: Unknown operation type {set_op}")
                 raise Exception("Unknown operation type")
 
             # Nothing happened
             if cur_solid is None:
+                clglogger.warning(f"Step {i}: cur_solid is None after boolean operation {set_op}.")
                 continue
 
             # Check solid changes (skip)
@@ -948,17 +964,26 @@ class CADSequence(object):
                 solid_volume1 = props.Mass()
                 brepgprop.VolumeProperties(cur_solid, props)
                 solid_volume2 = props.Mass()
-                if (solid_volume1 - solid_volume2) == 0:
+                # Use a small tolerance instead of strict == 0 to account for floating point errors
+                if abs(solid_volume1 - solid_volume2) < 1e-6:
+                    clglogger.warning(f"Step {i}: Boolean operation {set_op} resulted in no volume change. Skipping step.")
                     continue
 
             # Solid not valid (skip)
             analyzer = BRepCheck_Analyzer(cur_solid)
             if not analyzer.IsValid():
+                clglogger.warning(f"Step {i}: BRepCheck_Analyzer rejected the solid. Topology is invalid (likely open loops or self-intersections).")
                 continue
+                
+            clglogger.info(f"Step {i}: Successfully appended to cad model.")
+
         if cur_solid is not None:
             self.cad_model = cur_solid
+            clglogger.info("CAD Model generated successfully.")
         else:
+            clglogger.error("Failed to generate CAD Model. All steps were skipped or failed.")
             raise Exception("No Cad Model generated")
+            
         return self
 
     def create_mesh(

@@ -159,7 +159,7 @@ class CADDecoder(nn.Module):
             num_heads=config["num_heads"],
             dropout=config["dropout"],
             ca_level_start=config["ca_level_start"],
-            device="mps" if torch.backends.mps.is_available() else "cpu",
+            device="cpu",
         )
         return cad_decoder
 
@@ -207,6 +207,21 @@ class CADDecoder(nn.Module):
                 False,
             )
 
+            # ================================================================= #
+            # 🚀 LOGIT PROCESSOR INJECTION: FORCE MULTI-PART GENERATION
+            # ================================================================= #
+            min_parts = 3  # Set this to the minimum number of parts you need (e.g., base, legs, backrest)
+            
+            # Count how many END_EXTRUSION tokens have been generated so far.
+            # This tells us exactly how many complete shapes the model has built.
+            completed_parts = (new_cad_seq_dict["cad_vec"][:, :t, 0] == END_TOKEN.index("END_EXTRUSION")).sum(dim=1)
+            
+            for b in range(num_texts):
+                if completed_parts[b] < min_parts:
+                    # Mathematically ban the model from picking the EOS token (which is START in this vocab)
+                    # by setting its raw unnormalized probability to negative infinity.
+                    cad_pred[b, t - 1 : t, 0, END_TOKEN.index("START")] = -float('inf')
+            # ================================================================= #
             # --------------------------------- Sampling --------------------------------- #
             # Hybrid-Sampling
             if nucleus_prob == 0:
@@ -305,7 +320,7 @@ class CADDecoderLayer(nn.Module):
         block_level=0,
         dropout=0.1,
         use_ca=True,
-        device="mps" if torch.backends.mps.is_available() else "cpu",
+        device="cpu",
     ):
         super(CADDecoderLayer, self).__init__()
 

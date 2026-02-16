@@ -35,36 +35,54 @@ def load_model(config, device):
     text2cad.eval()
     return text2cad
 
-def test_model(model, text, config, device):
-
+def test_model(model, text, config, device, max_retries=4):
+    import traceback
+    
     if not isinstance(text, list):
         text = [text]
 
-    try:
-        pred_cad_seq_dict = model.test_decode(
-            texts=text,
-            maxlen=MAX_CAD_SEQUENCE_LENGTH,
-            nucleus_prob=0,
-            topk_index=1,
-            device=device,
-        )
-    except Exception as e:
-        print(f"[test_model] Error during model.test_decode: {e}")
-        traceback.print_exc()
-        return None, str(e)
+    # The Auto-Retry Loop: Try up to 4 times to get a valid OCC geometry
+    for attempt in range(max_retries):
+        print(f"\n--- [Attempt {attempt + 1}/{max_retries}] Generating geometry for: '{text[0]}' ---")
+        
+        try:
+            # 1. Ask the AI to predict the tokens (using Top-P sampling for variance)
+            pred_cad_seq_dict = model.test_decode(
+                texts=text,
+                maxlen=MAX_CAD_SEQUENCE_LENGTH,
+                nucleus_prob=0.9,  # Critical for retries: ensures we get a slightly different sequence each time
+                topk_index=10,
+                device=device,
+            )
+        except Exception as e:
+            print(f"[test_model] Error during model decoding: {e}")
+            if attempt == max_retries - 1:
+                return None, str(e)
+            continue # Try again
 
-    try:
-        pred_cad = CADSequence.from_vec(
-            pred_cad_seq_dict["cad_vec"][0].cpu().numpy(),
-            bit=N_BIT,
-            post_processing=True,
-        ).create_mesh()
+        try:
+            # 2. Hand the tokens to OpenCASCADE to build the B-Rep and Mesh
+            pred_cad = CADSequence.from_vec(
+                pred_cad_seq_dict["cad_vec"][0].cpu().numpy(),
+                bit=N_BIT,
+                post_processing=True,
+            ).create_mesh()
 
-        return pred_cad.mesh, pred_cad
-    except Exception as e:
-        print(f"[test_model] Error during CAD sequence processing: {e}")
-        traceback.print_exc()
-        return None, str(e)
+            # If we make it to this line, OpenCASCADE accepted the topology!
+            print(f"✅ Attempt {attempt + 1} succeeded! Valid topology generated.")
+            return pred_cad.mesh, pred_cad
+            
+        except Exception as e:
+            error_msg = str(e)
+            print(f"⚠️ Attempt {attempt + 1} failed. OpenCASCADE rejected the geometry: {error_msg}")
+            
+            # If this was our last attempt, log the failure and give up
+            if attempt == max_retries - 1:
+                print(f"❌ All {max_retries} attempts failed to produce a valid B-Rep.")
+                traceback.print_exc()
+                return None, error_msg
+            
+            # Otherwise, the loop automatically restarts for the next attempt
 
 def parse_config_file(config_file):
     with open(config_file, "r") as file:
@@ -75,7 +93,7 @@ def parse_config_file(config_file):
 
 config_path = "../Cad_VLM/config/inference_user_input.yaml"
 config = parse_config_file(config_path)
-device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+device = torch.device("cpu")  # MPS produces NaN in the CAD decoder
 model = load_model(config, device)
 OUTPUT_DIR="output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)

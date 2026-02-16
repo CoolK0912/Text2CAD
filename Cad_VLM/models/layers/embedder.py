@@ -12,21 +12,23 @@ class PositionalEncodingSinCos(nn.Module):
     def __init__(self, embedding_size: int, max_seq_len: int, device: str):
         super().__init__()
         self.embedding_size = embedding_size
+        self.device = torch.device(device)
         self.max_seq_len = max_seq_len
 
         # create a matrix of shape (max_seq_len, embedding_size/2)
-        pos_enc = torch.zeros(max_seq_len, embedding_size)
+        self.pos_enc = torch.zeros(max_seq_len, embedding_size)
         pos = torch.arange(0, max_seq_len).unsqueeze(1)
         div_term = torch.exp(
             torch.arange(0, embedding_size, 2) * (-math.log(10000.0) / embedding_size)
         )
-        pos_enc[:, 0::2] = torch.sin(pos * div_term)
-        pos_enc[:, 1::2] = torch.cos(pos * div_term)
+        self.pos_enc[:, 0::2] = torch.sin(pos * div_term)
+        self.pos_enc[:, 1::2] = torch.cos(pos * div_term)
 
-        self.register_buffer("pos_enc", pos_enc.unsqueeze(0))
+        self.pos_enc = self.pos_enc.unsqueeze(0)
 
     def forward(self, seq_len):
-        return self.pos_enc[:, :seq_len, :]
+        x = self.pos_enc[:, :seq_len, :]
+        return x.to(self.device)
 
 
 class PositionalEncodingLUT(nn.Module):

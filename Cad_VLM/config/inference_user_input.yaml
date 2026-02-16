@@ -53,7 +53,7 @@ test:
   prompt_file: "YOUR PROMPT FILE"
 
 # ---------------------------------- Device ---------------------------------- #
-device: mps
+device: cpu
 
 # ------------------------------ Debug mode flag ----------------------------- #
 debug: False
