@@ -1,4 +1,5 @@
 import os, sys
+import traceback
 
 sys.path.append("..")
 sys.path.append("/".join(os.path.abspath(__file__).split("/")[:-1]))
@@ -35,16 +36,23 @@ def load_model(config, device):
     return text2cad
 
 def test_model(model, text, config, device):
-    
+
     if not isinstance(text, list):
         text = [text]
-    pred_cad_seq_dict = model.test_decode(
-        texts=text,
-        maxlen=MAX_CAD_SEQUENCE_LENGTH,
-        nucleus_prob=0,
-        topk_index=1,
-        device="mps" if torch.backends.mps.is_available() else "cpu",
-    )
+
+    try:
+        pred_cad_seq_dict = model.test_decode(
+            texts=text,
+            maxlen=MAX_CAD_SEQUENCE_LENGTH,
+            nucleus_prob=0,
+            topk_index=1,
+            device=device,
+        )
+    except Exception as e:
+        print(f"[test_model] Error during model.test_decode: {e}")
+        traceback.print_exc()
+        return None, str(e)
+
     try:
         pred_cad = CADSequence.from_vec(
             pred_cad_seq_dict["cad_vec"][0].cpu().numpy(),
@@ -54,7 +62,9 @@ def test_model(model, text, config, device):
 
         return pred_cad.mesh, pred_cad
     except Exception as e:
-        return None
+        print(f"[test_model] Error during CAD sequence processing: {e}")
+        traceback.print_exc()
+        return None, str(e)
 
 def parse_config_file(config_file):
     with open(config_file, "r") as file:
@@ -73,13 +83,15 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def genrate_cad_model_from_text(text):
     global model, config
-    mesh,*extra = test_model(model=model, text=text, config=config, device=device)
+    result = test_model(model=model, text=text, config=config, device=device)
+    mesh, extra = result[0], result[1]
     if mesh is not None:
         output_path = os.path.join(OUTPUT_DIR, "output.stl")
         mesh.export(output_path)
         return output_path
     else:
-        raise Exception("Error generating CAD model from text")
+        error_detail = extra if isinstance(extra, str) else "Unknown error"
+        raise gr.Error(f"Could not generate a valid CAD model. Detail: {error_detail}. Try a simpler prompt like 'A ring.' or 'A rectangular prism.'")
 
 
 examples = [
@@ -93,6 +105,8 @@ examples = [
 title = "Text2CAD: Generating Sequential CAD Designs from Beginner-to-Expert Level Text Prompts"
 description = """
 Generate 3D CAD models from text prompts of varying complexity, from beginner-level descriptions to expert-level specifications.
+
+**Note:** Generation takes ~1-2 minutes on Apple Silicon. Simple geometric prompts work best.
 
 <div style="display: flex; justify-content: center; gap: 10px; align-items: center;">
 
@@ -117,8 +131,8 @@ demo = gr.Interface(
     examples=examples,
     title=title,
     description=description,
-    theme=gr.themes.Soft(), 
+    theme=gr.themes.Soft(),
 )
 
 if __name__ == "__main__":
-    demo.launch(share=True)
+    demo.queue().launch(share=True)
