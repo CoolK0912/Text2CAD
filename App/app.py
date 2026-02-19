@@ -104,9 +104,14 @@ def genrate_cad_model_from_text(text):
     result = test_model(model=model, text=text, config=config, device=device)
     mesh, extra = result[0], result[1]
     if mesh is not None:
+        cad_seq = extra  # CADSequence object with .cad_model set
         output_path = os.path.join(OUTPUT_DIR, "output.stl")
         mesh.export(output_path)
-        return output_path
+        # Export STEP file
+        step_path = os.path.join(OUTPUT_DIR, "output.step")
+        cad_seq.save_stp(filename="output", output_folder=OUTPUT_DIR, type="step")
+        print(f"STEP file saved to: {os.path.abspath(step_path)}")
+        return output_path, step_path
     else:
         error_detail = extra if isinstance(extra, str) else "Unknown error"
         raise gr.Error(f"Could not generate a valid CAD model. Detail: {error_detail}. Try a simpler prompt like 'A ring.' or 'A rectangular prism.'")
@@ -145,7 +150,10 @@ Generate 3D CAD models from text prompts of varying complexity, from beginner-le
 demo = gr.Interface(
     fn=genrate_cad_model_from_text,
     inputs=gr.Textbox(label="Text", placeholder="Enter a text prompt here"),
-    outputs=gr.Model3D(clear_color=[0.678, 0.847, 0.902, 1.0], label="3D CAD Model"),
+    outputs=[
+        gr.Model3D(clear_color=[0.678, 0.847, 0.902, 1.0], label="3D CAD Model"),
+        gr.File(label="Download STEP File"),
+    ],
     examples=examples,
     title=title,
     description=description,
